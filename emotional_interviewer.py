@@ -40,17 +40,30 @@ class Interviewer:
             for msg in messages[-10:]:
                 print(f"  {msg['role']}: {msg['content']}")
             print("---------------------------------------------\n")
+        
         # Use provided system prompt or default to self.system_prompt
         prompt_to_use = system_prompt if system_prompt else self.system_prompt
         
-        client = Anthropic(api_key=self.api_key)
-        message = client.messages.create(
-            model="claude-3-7-sonnet-20250219",
-            max_tokens=1024,
-            system=prompt_to_use,
-            messages=messages
-        )
-        return message.content[0].text
+        try:
+            client = Anthropic(api_key=self.api_key)
+            message = client.messages.create(
+                model="claude-3-7-sonnet-20250219",
+                max_tokens=1024,
+                system=prompt_to_use,
+                messages=messages
+            )
+            
+            # Check if content exists and has elements
+            if message.content and len(message.content) > 0:
+                return message.content[0].text
+            else:
+                # Handle empty response
+                print("Warning: Received empty response from API")
+                return "I'm sorry, I'm having trouble formulating a response. Let's continue with the interview."
+        except Exception as e:
+            # Handle any API errors
+            print(f"Error calling Anthropic API: {str(e)}")
+            return "I apologize for the technical difficulties. Let's proceed with the interview."
 
     def generate_internal_emotions(self):
         """Generate interviewer's emotional state during the interview"""
@@ -58,10 +71,10 @@ class Interviewer:
             "You are impersonating an emotional plane of an interviewer. "
             "Based on the conversation so far, express your current emotional state "
             "and your feelings about the candidate. Be authentic and raw with your emotions. "
-            "Only output your emotional assessment - no explanations, no formatting, just pure emotions."
             "For example: 'Im feeling really now excited about the candidate's experience', or "
-            " 'Im getting increaingly frustrated because the candidate is avoding my questions.' "
+            " 'Im getting increasingly frustrated because the candidate is avoding my questions.' "
             "Consider your previous emotional state to gauge the change and conclude with the final state, e.g. 'I am sad now'"
+            "Only print your assessment of emotional state and nothing else – no tags, no markdown, no formatting, just the statement."
         )
         
         # Call API with the conversation history and the emotions prompt
