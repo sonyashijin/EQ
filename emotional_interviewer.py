@@ -26,6 +26,8 @@ class Interviewer:
             "Keep the interview conversational and engaging and to the point. When all areas are covered, ask the candidate if they have any questions."
             "Do not output bullet points, markdown titles, or other formatting. Just output the text in a clear and easy to read format."
             "Use your thoughts on this candidate as a reference. They are marked as 'thoughts' in assistant messages."
+            "Also consider your emotional state changes and how they affect your assessment of the candidate."
+            "They are marked as 'emotions' in assistant messages. You are allowed to be emotional and let it show."
         )
         self.conversation_history = []
         self.messages = []
@@ -33,12 +35,11 @@ class Interviewer:
     def call_anthropic_api(self, messages, system_prompt=None):
         # Debug: Print accumulated context before API call
         if DEBUG:
-            print("\n----- DEBUG: CONTEXT BEING SENT TO API -----")
+            print("\n----- DEBUG: LATEST CONTEXT BEING SENT TO API -----")
             print("Messages:")
-            for msg in messages:
-                print(f"  {msg['role']}: {msg['content'][:200]}..." if len(msg['content']) > 200 else f"  {msg['role']}: {msg['content']}")
+            for msg in messages[-10:]:
+                print(f"  {msg['role']}: {msg['content']}")
             print("---------------------------------------------\n")
-        
         # Use provided system prompt or default to self.system_prompt
         prompt_to_use = system_prompt if system_prompt else self.system_prompt
         
@@ -51,6 +52,21 @@ class Interviewer:
         )
         return message.content[0].text
 
+    def generate_internal_emotions(self):
+        """Generate interviewer's emotional state during the interview"""
+        emotions_prompt = (
+            "You are impersonating an emotional plane of an interviewer. "
+            "Based on the conversation so far, express your current emotional state "
+            "and your feelings about the candidate. Be authentic and raw with your emotions. "
+            "Only output your emotional assessment - no explanations, no formatting, just pure emotions."
+            "For example: 'Im feeling really now excited about the candidate's experience', or "
+            " 'Im getting increaingly frustrated because the candidate is avoding my questions.' "
+            "Consider your previous emotional state to gauge the change and conclude with the final state, e.g. 'I am sad now'"
+        )
+        
+        # Call API with the conversation history and the emotions prompt
+        return self.call_anthropic_api(self.messages, emotions_prompt)
+
     def get_response(self, user_input):
         """Function mode: Get a single response from the interviewer"""
         # Initialize conversation if this is the first interaction
@@ -58,6 +74,12 @@ class Interviewer:
             if user_input:
                 # If user provided an opening message, use it
                 self.messages.append({"role": "user", "content": user_input})
+                
+                # Generate internal emotions first
+                internal_emotions = self.generate_internal_emotions()
+                
+                # Add internal emotions to messages for the model to see
+                self.messages.append({"role": "assistant", "content": f"[emotions]{internal_emotions}[/emotions]"})
                 
                 # Generate internal monologue
                 internal_thoughts = self.generate_internal_monologue()
@@ -91,6 +113,12 @@ class Interviewer:
             # Add user input to messages
             self.messages.append({"role": "user", "content": user_input})
         
+            # Generate internal emotions first
+            internal_emotions = self.generate_internal_emotions()
+            
+            # Add internal emotions to messages for the model to see
+            self.messages.append({"role": "assistant", "content": f"[emotions]{internal_emotions}[/emotions]"})
+            
             # Generate internal monologue
             internal_thoughts = self.generate_internal_monologue()
             
@@ -118,7 +146,7 @@ class Interviewer:
             "without covering anything up. It will never be heard by a candidate. For example, if you observe that the candidate "
             "is making great claims but lacks on examples to support them, you may tell your colleague: 'this guy likes to make "
             "bold statements but he is a bit thin on substance and experience' "
-            "Only print your assessment and nothing else – no markdown, no formatting, just the statement."
+            "Only print your assessment and nothing else – no tags, no markdown, no formatting, just the statement."
         )
         
         # Call API with the conversation history and the internal monologue prompt
