@@ -18,8 +18,16 @@ def main():
     # Process all replies in a loop
     for reply in candidate_replies:
         print(f"\nCandidate: {reply}")
-        response = interviewer.conduct_interview(reply, function_mode=True)
-        print(f"Interviewer: {response}")
+        result = interviewer.conduct_interview(reply, function_mode=True)
+        
+        # Unpack the tuple returned by conduct_interview
+        emotions, thoughts, response, emotion_score = result
+        
+        # Print all components
+        print(f"Interviewer emotions: {emotions}")
+        print(f"Emotion score: {emotion_score}")
+        print(f"Interviewer thoughts: {thoughts}")
+        print(f"Interviewer response: {response}")
     
     print("\nTest completed successfully!")
 

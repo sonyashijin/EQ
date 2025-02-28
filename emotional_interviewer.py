@@ -3,9 +3,14 @@ import sys
 import json
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field
+
+class EmotionScore(BaseModel):
+    emotion: int = Field(description="Overall emotion state at the moment: 0-100, where 0 is very negative and 100 is elated")
+
 
 # Global debug flag
-DEBUG = True
+DEBUG = False
 
 class Interviewer:
     def __init__(self):
@@ -72,13 +77,42 @@ class Interviewer:
             "Based on the conversation so far, express your current emotional state "
             "and your feelings about the candidate. Be authentic and raw with your emotions. "
             "For example: 'Im feeling really now excited about the candidate's experience', or "
-            " 'Im getting increasingly frustrated because the candidate is avoding my questions.' "
+            "'Im getting increasingly frustrated because the candidate is avoding my questions.' "
             "Consider your previous emotional state to gauge the change and conclude with the final state, e.g. 'I am sad now'"
             "Only print your assessment of emotional state and nothing else – no tags, no markdown, no formatting, just the statement."
         )
         
         # Call API with the conversation history and the emotions prompt
         return self.call_anthropic_api(self.messages, emotions_prompt)
+
+    def generate_emotion_score(self, text):
+        """Generate an emotion score for a given text"""
+        emotion_score_schema = EmotionScore.model_json_schema()
+ 
+        tools = [
+            {
+                "name": "emotion_score_result",
+                "description": "build the emotion score object",
+                "input_schema": emotion_score_schema
+            }
+        ]
+        client = Anthropic(api_key=self.api_key)
+        message = client.messages.create(
+            model="claude-3-7-sonnet-20250219",
+            max_tokens=1200,
+            temperature=0.2,
+            system="You are calculating the integer emotion score for a given text (0-100).",
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"{text}"
+                }
+            ],
+            tools=tools,
+            tool_choice={"type": "tool", "name": "emotion_score_result"}
+        )
+        function_call = message.content[0].input
+        return EmotionScore(**function_call).emotion
 
     def get_response(self, user_input):
         """Function mode: Get a single response from the interviewer"""
@@ -89,19 +123,24 @@ class Interviewer:
                 self.messages.append({"role": "user", "content": user_input})
                 
                 # Generate internal emotions first
-                internal_emotions = self.generate_internal_emotions()
-                
+                internal_emotions = self.generate_internal_emotions().strip()
+                if "[emotions]" in internal_emotions and "[/emotions]" in internal_emotions:
+                    internal_emotions = internal_emotions.split("[emotions]")[1].split("[/emotions]")[0]
                 # Add internal emotions to messages for the model to see
                 self.messages.append({"role": "assistant", "content": f"[emotions]{internal_emotions}[/emotions]"})
                 
+                emotion_score = self.generate_emotion_score(internal_emotions)
+                if DEBUG:
+                    print(f"Emotion score: {emotion_score}")
                 # Generate internal monologue
-                internal_thoughts = self.generate_internal_monologue()
-                
+                internal_thoughts = self.generate_internal_monologue().strip()
+                if "[thoughts]" in internal_thoughts and "[/thoughts]" in internal_thoughts:
+                    internal_thoughts = internal_thoughts.split("[thoughts]")[1].split("[/thoughts]")[0]
                 # Add internal thoughts to messages for the model to see
                 self.messages.append({"role": "assistant", "content": f"[thoughts]{internal_thoughts}[/thoughts]"})
                 
                 # Get response from API
-                interviewer_response = self.call_anthropic_api(self.messages)
+                interviewer_response = self.call_anthropic_api(self.messages).strip()
                 
                 # Add the actual response to messages for future context
                 self.messages.append({"role": "assistant", "content": interviewer_response})
@@ -109,7 +148,7 @@ class Interviewer:
                 # Store the complete conversation history separately if needed
                 self.conversation_history = self.messages.copy()
                 
-                return interviewer_response
+                return (internal_emotions, internal_thoughts, interviewer_response, emotion_score)
             else:
                 # Otherwise start with an assistant message
                 initial_message = self.call_anthropic_api([{"role": "user", "content": "Hello, I'm here for the interview."}])
@@ -121,20 +160,30 @@ class Interviewer:
                 # Store the complete conversation history separately if needed
                 self.conversation_history = self.messages.copy()
                 
-                return initial_message
+                return (None, None, initial_message, None)
         else:
             # Add user input to messages
             self.messages.append({"role": "user", "content": user_input})
         
             # Generate internal emotions first
-            internal_emotions = self.generate_internal_emotions()
-            
+            internal_emotions = self.generate_internal_emotions().strip()
+            # Strip the answer and only return the content between [emotions]..[/emotions] or the whole string if there are no tags
+            if "[emotions]" in internal_emotions and "[/emotions]" in internal_emotions:
+                internal_emotions = internal_emotions.split("[emotions]")[1].split("[/emotions]")[0]
+
             # Add internal emotions to messages for the model to see
             self.messages.append({"role": "assistant", "content": f"[emotions]{internal_emotions}[/emotions]"})
             
+            # Generate emotion score
+            emotion_score = self.generate_emotion_score(internal_emotions)
+            if DEBUG:
+                print(f"Emotion score: {emotion_score}")
             # Generate internal monologue
-            internal_thoughts = self.generate_internal_monologue()
-            
+            internal_thoughts = self.generate_internal_monologue().strip()
+            # Strip the answer and only return the content between [thoughts]..[/thoughts] or the whole string if there are no tags
+            if "[thoughts]" in internal_thoughts and "[/thoughts]" in internal_thoughts:
+                internal_thoughts = internal_thoughts.split("[thoughts]")[1].split("[/thoughts]")[0]
+
             # Add internal thoughts to messages for the model to see
             self.messages.append({"role": "assistant", "content": f"[thoughts]{internal_thoughts}[/thoughts]"})
             
@@ -147,7 +196,7 @@ class Interviewer:
             # Store the complete conversation history separately if needed
             self.conversation_history = self.messages.copy()
             
-            return interviewer_response
+            return (internal_emotions, internal_thoughts, interviewer_response, emotion_score)
 
     def generate_internal_monologue(self):
         """Generate interviewer's internal thoughts about the candidate"""
@@ -176,56 +225,46 @@ class Interviewer:
         """
         # Function mode - just process one message and return
         if function_mode:
-            return self.get_response(opening_message)
+            emotions, thoughts, response, emotion_score = self.get_response(opening_message)
+            return (emotions, thoughts, response, emotion_score)
         
         # CLI mode - interactive session
         user_input = ""
         
-        # If an opening message is provided, use it to start the conversation
-        if opening_message:
-            print("Candidate:", opening_message)
-            interviewer_response = self.get_response(opening_message)
-            print("Interviewer:", interviewer_response)
-        # Otherwise, start with an initial message from the assistant
-        elif not self.conversation_history:
-            initial_message = self.get_response(None)
-            print("Interviewer:", initial_message)
+        # If no opening message is provided, use a default one
+        if not opening_message:
+            opening_message = "Hello, I'm here for the product management interview"
+            
+        # Process the opening message
+        print("Candidate:", opening_message)
+        print("\n")
+        emotions, thoughts, interviewer_response, emotion_score = self.get_response(opening_message)
+        print(f"Interviewer emotions: {emotions}\n")
+        print(f"Emotion score: {emotion_score}\n")
+        print(f"Interviewer thoughts: {thoughts}\n")
+        print(f"Interviewer response: {interviewer_response}\n")
         
+        # Continue with interactive loop
         while user_input.lower() != "exit":
             user_input = input("Candidate: ")
             if user_input.lower() == "exit":
                 break
                 
-            interviewer_response = self.get_response(user_input)
-            print("Interviewer:", interviewer_response)
+            emotions, thoughts, interviewer_response, emotion_score = self.get_response(user_input)
+            print(f"Interviewer emotions: {emotions}\n")
+            print(f"Emotion score: {emotion_score}\n")
+            print(f"Interviewer thoughts: {thoughts}\n")
+            print(f"Interviewer response: {interviewer_response}\n")
 
     def main(self):
         print("Welcome to the Product Management Interview! Type responses, or print 'exit' to end it.")
-        
-        # Check if we're in test function mode
-        if len(sys.argv) > 1 and sys.argv[1] == "--test-function-mode":
-            # Test the function mode with a series of messages
-            test_messages = [
-                "Hello, I'm here for the product management interview",
-                "I have experience with market positioning through competitive analysis",
-                "For TAM calculation, I typically start with the total market size",
-                "exit"
-            ]
-            
-            print("=== TESTING FUNCTION MODE ===")
-            for msg in test_messages:
-                if msg.lower() == "exit":
-                    break
-                print("Candidate:", msg)
-                response = self.conduct_interview(msg, function_mode=True)
-                print("Interviewer:", response)
-            return
         
         # Regular CLI mode
         opening_message = None
         if len(sys.argv) > 1:
             opening_message = " ".join(sys.argv[1:])
         
+        print("Opening message:", opening_message)
         self.conduct_interview(opening_message)
 
 if __name__ == "__main__":
