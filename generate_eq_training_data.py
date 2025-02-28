@@ -38,30 +38,41 @@ SCENARIO:
 CONVERSATION NEEDED:
 {conversation_needed}
 
-Generate {num_variations} different conversation histories that represent DIVERSE points in the conversation with DIFFERENT emotional states and conversation points. Each variation should be at a different stage of the conversation with different emotional dynamics.
+Generate {num_variations} different conversation histories that represent DIVERSE points in the conversation with DIFFERENT emotional states and conversation points. Each variation should be at a different stage with different emotional dynamics.
 
 For each variation, provide:
-1. A variation_description: A short phrase (3-7 words) describing this variation (e.g., "Early stage with defensive resistance", "Middle stage with emotional vulnerability", "Final stage with cautious acceptance")
+1. A variation_description: A short phrase describing this variation (e.g., "Initial approach - no prior contact", "Multiple failed attempts - growing frustration", "Extensive history - tried various approaches")
 2. A conversation objective
-3. A summary of what has happened so far (3-4 exchanges)
+3. A conversation history that could be:
+   - No prior exchanges (first approach)
+   - A few recent exchanges (2-3)
+   - Multiple past attempts with what worked/didn't work
+   - Extensive history of different approaches tried
 4. The current emotional state of the other party (make these VERY DIVERSE across variations)
-5. The current point in the conversation where the user needs to respond (be specific about what the other person just said or did)
+5. The current point in the conversation where the user needs to respond (what the other person just said or did)
 
 Format your response as a JSON array with {num_variations} objects, each containing:
 - variation_id: A number from 1 to {num_variations}
 - variation_description: A short descriptive phrase for this variation
 - conversation_objective: The specific goal to achieve through this conversation
-- conversation_history: A summary of what has happened in the conversation so far (3-4 exchanges)
+- conversation_history: The history of interactions (ranging from none to extensive)
 - current_emotional_state: A description of the current emotional state of the other party
-- conversation_point: The current point in the conversation where the user needs to respond (what the other person just said or did)
+- conversation_point: The current point in the conversation where the user needs to respond
 
 IMPORTANT: 
-- Make each variation TRULY DIFFERENT in terms of emotional state and conversation progress
-- Include variations where the conversation is going well, poorly, and in between
-- Include variations with different emotional states (angry, defensive, open, confused, etc.)
-- Include variations at different stages (beginning, middle, near resolution, etc.)
-- Make the conversation_point specific, ideally including what the other person just said
+- Include variations with NO prior exchanges (first time addressing the issue)
+- Include variations with EXTENSIVE history (multiple past attempts, what worked/didn't)
+- Include variations with DIFFERENT amounts of prior interaction
+- Make each variation TRULY DIFFERENT in terms of conversation progress
+- Include variations where previous approaches failed
+- Make the conversation_point specific about what the other person just said/did
 - Your entire response must be valid JSON that can be parsed
+
+Example variations:
+1. No prior exchanges: "No previous discussions about this issue"
+2. Brief history: "Two previous attempts to discuss, both met with deflection"
+3. Multiple attempts: "Five previous conversations, tried direct approach, then sympathetic, then involving HR"
+4. Extensive history: "Month-long pattern of discussions, tried various strategies including..."
 """
 
 def generate_optimal_response_prompt(scenario, conversation_data, persona):
