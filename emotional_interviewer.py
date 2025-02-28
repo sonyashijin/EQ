@@ -5,7 +5,7 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 
 # Global debug flag
-DEBUG = False
+DEBUG = True
 
 class Interviewer:
     def __init__(self):
@@ -25,11 +25,12 @@ class Interviewer:
             "Make it general enough to test the candidate's knowledge and ask them to provide specific examples."
             "Keep the interview conversational and engaging and to the point. When all areas are covered, ask the candidate if they have any questions."
             "Do not output bullet points, markdown titles, or other formatting. Just output the text in a clear and easy to read format."
+            "Use your thoughts on this candidate as a reference. They are marked as 'thoughts' in assistant messages."
         )
         self.conversation_history = []
         self.messages = []
 
-    def call_anthropic_api(self, messages):
+    def call_anthropic_api(self, messages, system_prompt=None):
         # Debug: Print accumulated context before API call
         if DEBUG:
             print("\n----- DEBUG: CONTEXT BEING SENT TO API -----")
@@ -38,11 +39,14 @@ class Interviewer:
                 print(f"  {msg['role']}: {msg['content'][:100]}..." if len(msg['content']) > 100 else f"  {msg['role']}: {msg['content']}")
             print("---------------------------------------------\n")
         
+        # Use provided system prompt or default to self.system_prompt
+        prompt_to_use = system_prompt if system_prompt else self.system_prompt
+        
         client = Anthropic(api_key=self.api_key)
         message = client.messages.create(
             model="claude-3-7-sonnet-20250219",
             max_tokens=1024,
-            system=self.system_prompt,
+            system=prompt_to_use,
             messages=messages
         )
         return message.content[0].text
@@ -50,31 +54,75 @@ class Interviewer:
     def get_response(self, user_input):
         """Function mode: Get a single response from the interviewer"""
         # Initialize conversation if this is the first interaction
-        if not self.conversation_history:
+        if not self.messages:
             if user_input:
                 # If user provided an opening message, use it
-                self.conversation_history.append({"role": "user", "content": user_input})
                 self.messages.append({"role": "user", "content": user_input})
+                
+                # Generate internal monologue
+                internal_thoughts = self.generate_internal_monologue()
+                
+                # Add internal thoughts to messages for the model to see
+                self.messages.append({"role": "assistant", "content": f"[thoughts]{internal_thoughts}[/thoughts]"})
+                
+                # Get response from API
                 interviewer_response = self.call_anthropic_api(self.messages)
+                
+                # Add the actual response to messages for future context
+                self.messages.append({"role": "assistant", "content": interviewer_response})
+                
+                # Store the complete conversation history separately if needed
+                self.conversation_history = self.messages.copy()
+                
+                return interviewer_response
             else:
                 # Otherwise start with an assistant message
                 initial_message = self.call_anthropic_api([{"role": "user", "content": "Hello, I'm here for the interview."}])
-                self.conversation_history.append({"role": "assistant", "content": initial_message})
+                
+                # No thoughts for the initial message since there's no context yet
+                self.messages.append({"role": "user", "content": "Hello, I'm here for the interview."})
                 self.messages.append({"role": "assistant", "content": initial_message})
+                
+                # Store the complete conversation history separately if needed
+                self.conversation_history = self.messages.copy()
+                
                 return initial_message
         else:
-            # Add user input to conversation history
-            self.conversation_history.append({"role": "user", "content": user_input})
+            # Add user input to messages
             self.messages.append({"role": "user", "content": user_input})
         
-        # Get response from API
-        interviewer_response = self.call_anthropic_api(self.messages)
+            # Generate internal monologue
+            internal_thoughts = self.generate_internal_monologue()
+            
+            # Add internal thoughts to messages for the model to see
+            self.messages.append({"role": "assistant", "content": f"[thoughts]{internal_thoughts}[/thoughts]"})
+            
+            # Get response from API
+            interviewer_response = self.call_anthropic_api(self.messages)
+            
+            # Add the actual response to messages for future context
+            self.messages.append({"role": "assistant", "content": interviewer_response})
+            
+            # Store the complete conversation history separately if needed
+            self.conversation_history = self.messages.copy()
+            
+            return interviewer_response
+
+    def generate_internal_monologue(self):
+        """Generate interviewer's internal thoughts about the candidate"""
+        internal_monologue_prompt = (
+            "You are an interviewer conducting a job assessment interview on a candidate's Product management skills. "
+            "Your job is to assess where you are in this conversation given the following context: "
+            "(a) what the interviewee said so far (b) how you candidly assessed this internally and (c) what you said back to him. "
+            "Your assessment should be candid and similar to what you would say to your good colleague about this candidate, "
+            "without covering anything up. It will never be heard by a candidate. For example, if you observe the candidate "
+            "is making great claims but lacks on example to support it, you may tell your colleague: 'this guy like to make "
+            "bold claims but he is bit thin on substance and experience' "
+            "Only print your assessment and nothing else."
+        )
         
-        # Add response to conversation history
-        self.conversation_history.append({"role": "assistant", "content": interviewer_response})
-        self.messages.append({"role": "assistant", "content": interviewer_response})
-        
-        return interviewer_response
+        # Call API with the conversation history and the internal monologue prompt
+        return self.call_anthropic_api(self.messages, internal_monologue_prompt)
 
     def conduct_interview(self, opening_message=None, function_mode=False):
         """
