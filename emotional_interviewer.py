@@ -36,7 +36,7 @@ class Interviewer:
             print("\n----- DEBUG: CONTEXT BEING SENT TO API -----")
             print("Messages:")
             for msg in messages:
-                print(f"  {msg['role']}: {msg['content'][:100]}..." if len(msg['content']) > 100 else f"  {msg['role']}: {msg['content']}")
+                print(f"  {msg['role']}: {msg['content'][:200]}..." if len(msg['content']) > 200 else f"  {msg['role']}: {msg['content']}")
             print("---------------------------------------------\n")
         
         # Use provided system prompt or default to self.system_prompt
@@ -114,11 +114,11 @@ class Interviewer:
             "You are an interviewer conducting a job assessment interview on a candidate's Product management skills. "
             "Your job is to assess where you are in this conversation given the following context: "
             "(a) what the interviewee said so far (b) how you candidly assessed this internally and (c) what you said back to him. "
-            "Your assessment should be candid and similar to what you would say to your good colleague about this candidate, "
-            "without covering anything up. It will never be heard by a candidate. For example, if you observe the candidate "
-            "is making great claims but lacks on example to support it, you may tell your colleague: 'this guy like to make "
-            "bold claims but he is bit thin on substance and experience' "
-            "Only print your assessment and nothing else."
+            "Your assessment should be straightforward and similar to what you would say to your good colleague about this candidate, "
+            "without covering anything up. It will never be heard by a candidate. For example, if you observe that the candidate "
+            "is making great claims but lacks on examples to support them, you may tell your colleague: 'this guy likes to make "
+            "bold statements but he is a bit thin on substance and experience' "
+            "Only print your assessment and nothing else – no markdown, no formatting, just the statement."
         )
         
         # Call API with the conversation history and the internal monologue prompt
@@ -159,7 +159,7 @@ class Interviewer:
             print("Interviewer:", interviewer_response)
 
     def main(self):
-        print("Welcome to the Product Management Interview!")
+        print("Welcome to the Product Management Interview! Type responses, or print 'exit' to end it.")
         
         # Check if we're in test function mode
         if len(sys.argv) > 1 and sys.argv[1] == "--test-function-mode":
